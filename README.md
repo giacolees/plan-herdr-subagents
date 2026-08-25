@@ -2,17 +2,62 @@
 
 **One `pi` package for the entire `/plan` grill-and-plan workflow.**
 
-`plan-herdr-subagents` bundles the whole V2 pipeline into a single install:
+`plan-herdr-subagents` bundles the whole pipeline into a single install (V3: cached + fresh contexts):
 
 ```
-Phase 1  quick orientation          (main session, ~30s)
+Cached context (.agent/)  →  architecture, conventions, decisions, domain (stable, reused)
+Fresh context (per task)  →  request + relevant files + plan + diff (small, independent)
+
+Phase 1  quick orientation          (main session, ~30s — checks .agent/ + stack)
 Phase 2  Grill-and-Plan planner     (interactive, one session — grilling + domain-modeling → plan.md + pointer todos)
+       ↳ Scout (optional, only for unfamiliar/large areas)
 Phase 3  human gate                 (verify plan.md + ISC + todos)
-Phase 4  sequential workers         (pointer-contract, one worker per todo)
-Phase 5  reviewer                   (ISC evidence + P0-P3 triage)
+Phase 4  sequential workers         (pointer-contract, one worker per todo — cached + plan § + relevant source)
+Phase 5  reviewer                   (ISC evidence + P0-P3 triage — cached + plan + diff)
+Phase 6  knowledge update           (permanent knowledge → .agent/, task reasoning discarded)
 ```
 
-Install once, get the slash command, every agent, every skill, todo forwarding, and diagnostics — no five-package choreography.
+## Workflow graph
+
+```mermaid
+flowchart TD
+    Request[User request] --> PlanCommand[/plan]
+    PlanCommand --> Bootstrap[Initialize missing target .agent cache\nfrom bundled templates; never overwrite]
+    Bootstrap --> Orientation[Quick orientation\ncache plus relevant stack]
+
+    Cache[(.agent cache\narchitecture, conventions, decisions, domain)] --> Planner
+    Orientation --> Planner[Interactive planner\ngrilling plus domain modeling]
+    Planner -->|unfamiliar or large area| Scout[Optional scout\nread-only focused facts]
+    Scout --> Planner
+    Planner --> Domain[Update CONTEXT.md or ADRs\nonly when warranted]
+    Planner --> Plan[Write .agent/plans/task/plan.md\nISC plus acceptance commands]
+    Planner --> Todos[Create pointer-contract todos\nforwarded to parent session]
+    Domain --> Plan
+    Plan --> Gate{Human reviews\nplan, ISC, and todos}
+    Todos --> Gate
+
+    Cache --> Worker[Sequential worker\none todo at a time]
+    Gate -->|approved| Worker
+    Worker --> Source[Fresh context only\nplan section, pattern files, diff]
+    Source --> Verify[Acceptance commands plus\nLSP and lens diagnostics]
+    Verify -->|next todo| Worker
+    Verify -->|all todos complete| Reviewer
+
+    Cache --> Reviewer[Reviewer\nplan plus diff]
+    Plan --> Reviewer
+    Reviewer --> Review[Evidence for every ISC\nP0 to P3 triage]
+    Review -->|P0 or P1| Repair[Create repair todo]
+    Repair --> Worker
+    Review -->|pass or P2/P3 noted| Promote{Permanent knowledge?}
+    Promote -->|yes| Update[Update .agent or product CONTEXT.md/ADR]
+    Promote -->|no| Discard[Discard fresh task reasoning]
+    Update --> Done[Completed task]
+    Discard --> Done
+```
+
+`CONTEXT.md` and ADRs model the product domain; `.agent/` models durable project knowledge. The plan, scout report, source reads, diff, and test evidence are fresh task context and are not promoted unless they become permanent.
+
+Install once, get the slash command, every agent, every skill, todo forwarding, and diagnostics — no five-package choreography. On the first `/plan`, the extension initializes the target project's `.agent/` cache from bundled templates without overwriting existing knowledge.
 
 ```bash
 pi install npm:plan-herdr-subagents
@@ -159,15 +204,16 @@ pi
 /plan <your request>
 ```
 
-The slash command injects `extensions/herdr-subagents/plan-skill.md` (V2 spec) into the main session. The main agent then:
+The slash command injects `extensions/herdr-subagents/plan-skill.md` (V3: cached + fresh) into the main session. The main agent then:
 
-1. ~30s orientation (`ls`, `find`, `package.json` peek)
-2. spawns one interactive `planner` (`interactive: true`) — grill rounds until frontier empty → writes `.pi/plans/YYYY-MM-DD-<name>/plan.md` + `CONTEXT.md`/`docs/adr` + pointer todos (forwarded to parent)
+1. ~30s orientation (`ls .agent/`, `find`, `package.json` peek)
+2. initializes missing `.agent/` cache files from bundled templates, then spawns one interactive `planner` (`interactive: true`) — loads cached context, grill rounds until frontier empty → writes `.agent/plans/YYYY-MM-DD-<name>/plan.md` + `CONTEXT.md`/`docs/adr` + pointer todos (forwarded to parent)
 3. human gate (you review ISC + todos)
-4. sequential `worker` loop — pointer task per todo (`caller_ping` on ambiguity)
-5. `reviewer` against ISC/acceptance commands
+4. sequential `worker` loop — each worker loads cached context + `plan.md` § + pattern file only (`caller_ping` on ambiguity); scout only if unfamiliar/large
+5. `reviewer` against ISC/acceptance commands (cached + plan + diff)
+6. knowledge update — permanent decisions/conventions → `.agent/`, task reasoning discarded
 
-Artifacts: `.pi/plans/<name>/plan.md`, `CONTEXT.md`, `docs/adr/NNNN-*.md`, todos in session.
+Artifacts: `.agent/plans/<name>/plan.md`, `.agent/*.md` (cached), `CONTEXT.md`, `docs/adr/NNNN-*.md`, todos in session.
 
 ---
 

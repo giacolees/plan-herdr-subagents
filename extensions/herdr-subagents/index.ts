@@ -77,6 +77,38 @@ import {
 
 /** Absolute path to `pi-extension/subagents`. https://github.com/nodejs/node/issues/37845 */
 const SUBAGENTS_DIR = dirname(fileURLToPath(import.meta.url));
+const PROJECT_CONTEXT_TEMPLATE_DIR = join(SUBAGENTS_DIR, "../../templates/agent");
+const PROJECT_CONTEXT_FILES = [
+  "architecture.md",
+  "conventions.md",
+  "decisions.md",
+  "domain.md",
+] as const;
+
+/**
+ * Initialize the target project's reusable context cache without overwriting
+ * existing project knowledge. Templates are shipped with the package because
+ * agents execute in the target project, not in the installed package directory.
+ */
+function ensureProjectContextCache(cwd: string): string[] {
+  const cacheDir = join(cwd, ".agent");
+  const plansDir = join(cacheDir, "plans");
+  mkdirSync(plansDir, { recursive: true });
+
+  const created: string[] = [];
+  for (const file of PROJECT_CONTEXT_FILES) {
+    const destination = join(cacheDir, file);
+    if (existsSync(destination)) continue;
+
+    const template = join(PROJECT_CONTEXT_TEMPLATE_DIR, file);
+    if (!existsSync(template)) {
+      throw new Error(`Missing bundled project-context template: ${file}`);
+    }
+    copyFileSync(template, destination);
+    created.push(destination);
+  }
+  return created;
+}
 
 // Survive /reload: replace presentation timers while keeping active completion
 // watchers and their registry alive. Old module closures continue watching the
@@ -1377,12 +1409,18 @@ async function launchSubagent(
   try {
     const parentSid = ctx.sessionManager.getSessionId();
     if (parentSid) envParts.push(`PI_PARENT_SESSION=${shellQuote(parentSid)}`);
-  } catch {}
+  } catch (error) {
+    // Session identity is optional in stripped-down runtime contexts.
+    void error;
+  }
   // Hint for artifact fallback (plan name extraction)
   try {
     const hint = params.task.slice(0, 2000).replace(/\n/g, " ").replace(/'/g, "");
     if (hint) envParts.push(`PI_SUBAGENT_TASK_HINT=${shellQuote(hint)}`);
-  } catch {}
+  } catch (error) {
+    // The hint is an optional optimization; launching must not depend on it.
+    void error;
+  }
   const envPrefix = envParts.join(" ") + " ";
 
   // Pass task and skill prompts to the sub-agent.
@@ -1612,7 +1650,10 @@ async function watchSubagent(
   } catch (err: any) {
     try {
       closePane(surface);
-    } catch {}
+    } catch (closeError) {
+      // Preserve the original completion failure when pane cleanup also fails.
+      void closeError;
+    }
     running.lifecycle = markFailed(
       running.lifecycle,
       signal.aborted ? "Subagent cancelled." : err?.message ?? String(err),
@@ -2513,6 +2554,19 @@ export default function subagentsExtension(pi: ExtensionAPI) {
       const task = args.trim();
       if (!task) {
         ctx.ui.notify("Usage: /plan <what to build>", "warning");
+        return;
+      }
+
+      // Create the target project's cache from bundled templates on first use.
+      // Never overwrite existing cache files: they are durable project knowledge.
+      try {
+        const created = ensureProjectContextCache(ctx.cwd);
+        if (created.length > 0) {
+          ctx.ui.notify(`Initialized cached project context in ${join(ctx.cwd, ".agent")}.`, "info");
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Cannot initialize .agent context: ${detail}`, "error");
         return;
       }
 

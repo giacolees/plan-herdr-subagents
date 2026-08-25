@@ -14,7 +14,6 @@ import {
 	writeFileSync,
 	appendFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
 
 const HERDR_ENV = process.env.HERDR_ENV;
 const SOCKET_PATH = process.env.HERDR_SOCKET_PATH;
@@ -48,19 +47,28 @@ function tryForwardViaSocket(payload: unknown): void {
 		sock.on("error", () => {
 			try {
 				sock.destroy();
-			} catch {}
+			} catch (error) {
+				void error;
+			}
 		});
 		sock.on("connect", () => {
 			try {
 				sock.write(req + "\n");
-			} catch {}
+			} catch (error) {
+				void error;
+			}
 			setTimeout(() => {
 				try {
 					sock.destroy();
-				} catch {}
+				} catch (error) {
+					void error;
+				}
 			}, 200);
 		});
-	} catch {}
+	} catch (error) {
+		// Socket forwarding is optional; the sidecar remains authoritative.
+		void error;
+	}
 }
 
 function randomId(): string {
@@ -142,7 +150,10 @@ async function tryImportTodosInParent(ctx: any): Promise<void> {
 							`${home}/.pi/agent/npm/node_modules/@juicesharp/rpiv-todo/state/store.js`
 						);
 					}
-				} catch {}
+				} catch (error) {
+					// Global fallback is optional when rpiv-todo is unavailable.
+					void error;
+				}
 			}
 			try {
 				reducer = await import("@juicesharp/rpiv-todo/state/state-reducer.js");
@@ -154,7 +165,10 @@ async function tryImportTodosInParent(ctx: any): Promise<void> {
 							`${home}/.pi/agent/npm/node_modules/@juicesharp/rpiv-todo/state/state-reducer.js`
 						);
 					}
-				} catch {}
+				} catch (error) {
+					// Global fallback is optional when rpiv-todo is unavailable.
+					void error;
+				}
 			}
 			if (
 				store &&
@@ -229,7 +243,9 @@ async function tryImportTodosInParent(ctx: any): Promise<void> {
 						`📋 Imported ${idMap.size} todo(s) from planner into main session`,
 						"info",
 					);
-				} catch {}
+				} catch (error) {
+					void error;
+				}
 			}
 		} catch (e) {
 			// fall through to file-append fallback
@@ -262,7 +278,10 @@ async function tryImportTodosInParent(ctx: any): Promise<void> {
 							sessionManager: ctx.sessionManager,
 						} as any);
 						nextId = replayState.nextId ?? 1;
-					} catch {}
+					} catch (error) {
+						// The fallback can safely start IDs at one without replay support.
+						void error;
+					}
 					const tasksForDetails = toImport.map((t, idx) => ({
 						id: nextId + idx,
 						subject: t.subject,
@@ -306,8 +325,13 @@ async function tryImportTodosInParent(ctx: any): Promise<void> {
 							`📋 Forwarded ${tasksForDetails.length} planner todo(s) to main session (file-append fallback)`,
 							"info",
 						);
-					} catch {}
-				} catch {}
+					} catch (error) {
+						void error;
+					}
+				} catch (error) {
+					// File persistence is a best-effort fallback.
+					void error;
+				}
 			}
 		}
 	}
@@ -340,39 +364,50 @@ export default function (pi: ExtensionAPI) {
 					`${sessionFile}.todos.json`,
 					JSON.stringify(details, null, 2),
 				);
-			} catch {}
+			} catch (error) {
+				// Parent-side import has its own fallback path.
+				void error;
+			}
 			// Also write to artifact dir for visibility (plan artifact)
 			try {
 				const parentSession = process.env.PI_PARENT_SESSION_FILE;
 				if (parentSession) {
 					// Derive plan name from task if possible — best-effort
 					const task = process.env.PI_SUBAGENT_TASK_HINT ?? "";
-					const m = task.match(/\.pi\/plans\/([^/\s]+)/);
+					const m = task.match(/\.agent\/plans\/([^/\s]+)/);
 					if (m) {
 						const planName = m[1];
 						// parentSession dir is like .../sessions/<cwd>/artifacts/<id>/ but we can just use cwd
-						// Write to cwd's .pi/plans/<planName>/planner-todos.json as well
+						// Write to cwd's .agent/plans/<planName>/planner-todos.json as well
 						const cwd = process.cwd();
-						const planTodosPath = `${cwd}/.pi/plans/${planName}/planner-todos.json`;
+						const planTodosPath = `${cwd}/.agent/plans/${planName}/planner-todos.json`;
 						try {
 							writeFileSync(planTodosPath, JSON.stringify(details, null, 2));
-						} catch {}
+						} catch (error) {
+							void error;
+						}
 					}
 				}
-			} catch {}
+			} catch (error) {
+				// The session sidecar remains the reliable forwarding channel.
+				void error;
+			}
 			// Best-effort socket notify to parent (sidecar is the reliable channel)
 			tryForwardViaSocket({
 				type: "planner_todos",
 				sessionFile,
 				count: details.tasks.length,
 			});
-		} catch {}
+		} catch (error) {
+			// Todo forwarding must not break planner execution.
+			void error;
+		}
 	});
 
 	// Capture parent session/task hint at launch time for artifact path
-	pi.on("session_start", async (_event: any, ctx: any) => {
-		// Record parent info if available (set by patched pi-herdr-subagents)
-		// No-op otherwise.
+	pi.on("session_start", async (_event: any, _ctx: any) => {
+		// Reserved for session metadata supplied by patched pi-herdr-subagents.
+		void _ctx;
 	});
 
 	// --- Parent (main) side: import on every agent start/turn start ---
@@ -380,17 +415,26 @@ export default function (pi: ExtensionAPI) {
 	pi.on("agent_start", async (_e: any, ctx: any) => {
 		try {
 			await tryImportTodosInParent(ctx);
-		} catch {}
+		} catch (error) {
+			// Import is retried by later lifecycle hooks.
+			void error;
+		}
 	});
 	pi.on("before_agent_start", async (_e: any, ctx: any) => {
 		try {
 			await tryImportTodosInParent(ctx);
-		} catch {}
+		} catch (error) {
+			// Import is retried by later lifecycle hooks.
+			void error;
+		}
 	});
 	pi.on("session_start", async (_e: any, ctx: any) => {
 		// On reload, re-import any unimported planner todos (covers persistence fallback)
 		try {
 			await tryImportTodosInParent(ctx);
-		} catch {}
+		} catch (error) {
+			// A later agent start retries the import.
+			void error;
+		}
 	});
 }

@@ -3,6 +3,18 @@
 All notable changes to `plan-herdr-subagents` are documented here.
 Format follows Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+
+- Cached project-context bootstrap: `/plan` creates missing target-project `.agent/` files from bundled `templates/agent/` without overwriting existing knowledge.
+- `.agent/plans/YYYY-MM-DD-<name>/` plan artifacts, keeping plans explicit and persistent beside cached context.
+
+### Changed
+
+- Planner, worker, reviewer, scout, and visual-tester prompts now use cached `.agent/` context with fresh task-specific context.
+- Planner todo forwarding now persists its visible sidecar under `.agent/plans/`.
+
 ## [0.2.0] - 2026-08-25
 
 ### Added
