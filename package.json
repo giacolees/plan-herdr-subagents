@@ -20,12 +20,12 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/giacomo/plan-herdr-subagents"
+    "url": "https://github.com/giacolees/plan-herdr-subagents"
   },
   "bugs": {
-    "url": "https://github.com/giacomo/plan-herdr-subagents/issues"
+    "url": "https://github.com/giacolees/plan-herdr-subagents/issues"
   },
-  "homepage": "https://github.com/giacomo/plan-herdr-subagents#readme",
+  "homepage": "https://github.com/giacolees/plan-herdr-subagents#readme",
   "files": [
     "extensions/",
     "skills/",
