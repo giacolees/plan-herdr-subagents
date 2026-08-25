@@ -1,0 +1,79 @@
+{
+  "name": "plan-herdr-subagents",
+  "version": "0.2.0",
+  "description": "Single pi package for the entire /plan grill-and-plan workflow — one interactive planner does grilling + domain-modeling → pointer plan + todos → sequential workers → reviewer, all on herdr subagents.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "herdr",
+    "subagents",
+    "plan",
+    "grilling",
+    "domain-modeling",
+    "planner",
+    "worker",
+    "reviewer",
+    "scout"
+  ],
+  "license": "MIT",
+  "author": "Giacomo Lisita",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giacomo/plan-herdr-subagents"
+  },
+  "bugs": {
+    "url": "https://github.com/giacomo/plan-herdr-subagents/issues"
+  },
+  "homepage": "https://github.com/giacomo/plan-herdr-subagents#readme",
+  "files": [
+    "extensions/",
+    "skills/",
+    "agents/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "pi-herdr-subagents": "^0.1.7",
+    "@juicesharp/rpiv-todo": "^2.7.1",
+    "pi-lens": "^3.8.74"
+  },
+  "bundledDependencies": [
+    "pi-herdr-subagents",
+    "@juicesharp/rpiv-todo",
+    "pi-lens"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/herdr-subagents/index.ts",
+      "./extensions/planner-todo-forward.ts",
+      "node_modules/@juicesharp/rpiv-todo/index.ts",
+      "node_modules/pi-lens/dist/index.js"
+    ],
+    "skills": [
+      "./skills/grilling",
+      "./skills/domain-modeling"
+    ]
+  }
+}
