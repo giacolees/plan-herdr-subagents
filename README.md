@@ -21,37 +21,37 @@ Phase 6  knowledge update           (permanent knowledge → .agent/, task reaso
 
 ```mermaid
 flowchart TD
-    Request[User request] --> PlanCommand[/plan]
-    PlanCommand --> Bootstrap[Initialize missing target .agent cache\nfrom bundled templates; never overwrite]
-    Bootstrap --> Orientation[Quick orientation\ncache plus relevant stack]
+    Request["User request"] --> PlanCommand["Run plan command"]
+    PlanCommand --> Bootstrap["Initialize missing agent cache<br/>from bundled templates without overwrite"]
+    Bootstrap --> Orientation["Quick orientation<br/>cache and relevant stack"]
 
-    Cache[(.agent cache\narchitecture, conventions, decisions, domain)] --> Planner
-    Orientation --> Planner[Interactive planner\ngrilling plus domain modeling]
-    Planner -->|unfamiliar or large area| Scout[Optional scout\nread-only focused facts]
+    Cache["Agent cache<br/>architecture, conventions, decisions, domain"] --> Planner
+    Orientation --> Planner["Interactive planner<br/>grilling and domain modeling"]
+    Planner -->|needs facts| Scout["Optional scout<br/>focused read-only facts"]
     Scout --> Planner
-    Planner --> Domain[Update CONTEXT.md or ADRs\nonly when warranted]
-    Planner --> Plan[Write .agent/plans/task/plan.md\nISC plus acceptance commands]
-    Planner --> Todos[Create pointer-contract todos\nforwarded to parent session]
+    Planner --> Domain["Update product glossary or ADR<br/>only when warranted"]
+    Planner --> Plan["Write durable plan<br/>ISC and acceptance commands"]
+    Planner --> Todos["Create pointer-contract todos<br/>forwarded to parent session"]
     Domain --> Plan
-    Plan --> Gate{Human reviews\nplan, ISC, and todos}
+    Plan --> Gate{"Human review<br/>plan, ISC, and todos"}
     Todos --> Gate
 
-    Cache --> Worker[Sequential worker\none todo at a time]
+    Cache --> Worker["Sequential worker<br/>one todo at a time"]
     Gate -->|approved| Worker
-    Worker --> Source[Fresh context only\nplan section, pattern files, diff]
-    Source --> Verify[Acceptance commands plus\nLSP and lens diagnostics]
+    Worker --> Source["Fresh task context<br/>plan section, pattern files, diff"]
+    Source --> Verify["Acceptance commands<br/>LSP and lens diagnostics"]
     Verify -->|next todo| Worker
-    Verify -->|all todos complete| Reviewer
+    Verify -->|all complete| Reviewer
 
-    Cache --> Reviewer[Reviewer\nplan plus diff]
+    Cache --> Reviewer["Reviewer<br/>plan and diff"]
     Plan --> Reviewer
-    Reviewer --> Review[Evidence for every ISC\nP0 to P3 triage]
-    Review -->|P0 or P1| Repair[Create repair todo]
+    Reviewer --> Review["ISC evidence<br/>P0 to P3 triage"]
+    Review -->|P0 or P1| Repair["Create repair todo"]
     Repair --> Worker
-    Review -->|pass or P2/P3 noted| Promote{Permanent knowledge?}
-    Promote -->|yes| Update[Update .agent or product CONTEXT.md/ADR]
-    Promote -->|no| Discard[Discard fresh task reasoning]
-    Update --> Done[Completed task]
+    Review -->|pass or P2 P3 noted| Promote{"Permanent knowledge"}
+    Promote -->|yes| Update["Update cache or product domain docs"]
+    Promote -->|no| Discard["Discard fresh task reasoning"]
+    Update --> Done["Completed task"]
     Discard --> Done
 ```
 
