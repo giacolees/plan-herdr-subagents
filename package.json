@@ -1,6 +1,6 @@
 {
   "name": "pi-herdr-subagents-planning",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Single pi package for the entire /plan grill-and-plan workflow — one interactive planner does grilling + domain-modeling → pointer plan + todos → sequential workers → reviewer, all on herdr subagents.",
   "keywords": [
     "pi-package",
