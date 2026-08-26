@@ -13,6 +13,7 @@ import {
   copyFileSync,
   unlinkSync,
 } from "node:fs";
+import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import {
   isTerminalAvailable,
@@ -108,6 +109,155 @@ function ensureProjectContextCache(cwd: string): string[] {
     created.push(destination);
   }
   return created;
+}
+
+/** True when the file is missing or still equals its bundled stub template. */
+function isStubFile(destination: string, template: string): boolean {
+  if (!existsSync(destination)) return true;
+  if (!existsSync(template)) return false;
+  try {
+    const dest = readFileSync(destination, "utf8").trim();
+    const tmpl = readFileSync(template, "utf8").trim();
+    if (dest === tmpl) return true;
+    // Already seeded by mine() — don't treat as stub again
+    if (dest.includes("Seeded (mine)") || dest.includes("Seeded from repo")) return false;
+    // Treat very short placeholder files as stubs (templates are <10 lines)
+    if (dest.length < 500 && dest.includes("Stable") && dest.split("\n").length < 12) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function isGitWorktree(cwd: string): boolean {
+  try {
+    const gitDir = execSync("git rev-parse --git-dir", { cwd, encoding: "utf8", stdio: "pipe" }).trim();
+    const commonDir = execSync("git rev-parse --git-common-dir", { cwd, encoding: "utf8", stdio: "pipe" }).trim();
+    // In a worktree, --git-dir points inside .git/worktrees/<name> while --git-common-dir points to the main .git
+    return gitDir !== commonDir;
+  } catch {
+    return false;
+  }
+}
+
+function getMainBranch(cwd: string): string {
+  try {
+    const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD", { cwd, encoding: "utf8", stdio: "pipe" }).trim();
+    // e.g. refs/remotes/origin/main -> main
+    const m = ref.match(/refs\/remotes\/origin\/(.+)/);
+    if (m) return m[1];
+  } catch {}
+  // Fallback: try to detect default branch via git config or assume main
+  try {
+    const branches = execSync("git branch -r", { cwd, encoding: "utf8", stdio: "pipe" });
+    if (branches.includes("origin/main")) return "main";
+    if (branches.includes("origin/master")) return "master";
+  } catch {}
+  return "main";
+}
+
+function getMainWorktreePath(cwd: string): string | null {
+  try {
+    const out = execSync("git worktree list --porcelain", { cwd, encoding: "utf8", stdio: "pipe" });
+    const first = out.split("\n\n")[0];
+    const m = first.match(/^worktree (.+)$/m);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Copy .agent/* from the main branch/worktree into cwd/.agent when in a worktree. */
+function copyFromMain(cwd: string): string[] {
+  const cacheDir = join(cwd, ".agent");
+  mkdirSync(join(cacheDir, "plans"), { recursive: true });
+  const copied: string[] = [];
+  const mainBranch = getMainBranch(cwd);
+  const mainWorktree = getMainWorktreePath(cwd);
+
+  for (const file of PROJECT_CONTEXT_FILES) {
+    const destination = join(cacheDir, file);
+    const template = join(PROJECT_CONTEXT_TEMPLATE_DIR, file);
+    if (existsSync(destination) && !isStubFile(destination, template)) continue;
+
+    let content: string | null = null;
+
+    // 1) Try git show main:.agent/<file> (works even when main worktree not checked out locally)
+    try {
+      content = execSync(`git show ${mainBranch}:.agent/${file}`, { cwd, encoding: "utf8", stdio: "pipe" });
+    } catch {}
+
+    // 2) Fallback: copy from main worktree's filesystem
+    if (content == null && mainWorktree && mainWorktree !== cwd) {
+      const src = join(mainWorktree, ".agent", file);
+      if (existsSync(src)) {
+        try {
+          content = readFileSync(src, "utf8");
+        } catch {}
+      }
+    }
+
+    if (content != null) {
+      writeFileSync(destination, content, "utf8");
+      copied.push(destination);
+    } else {
+      // Last resort: fall back to stub template so .agent is at least present
+      if (!existsSync(destination) && existsSync(template)) {
+        copyFileSync(template, destination);
+        copied.push(destination);
+      }
+    }
+  }
+  return copied;
+}
+
+/** Heuristic mining for non-worktree repos: ensure stubs then enrich empty stubs with repo-derived facts. */
+function mineRepo(cwd: string): string[] {
+  const created = ensureProjectContextCache(cwd);
+  const enriched: string[] = [...created];
+
+  // Lightweight enrichment: if files are still stubs, prepend a repo-derived header so they are not empty
+  // Full mining (Scout with LLM) happens via the planner on first /plan — this just makes cache non-empty.
+  // We keep it deterministic and never overwrite non-stub content.
+  for (const file of PROJECT_CONTEXT_FILES) {
+    const destination = join(cwd, ".agent", file);
+    const template = join(PROJECT_CONTEXT_TEMPLATE_DIR, file);
+    if (!isStubFile(destination, template)) continue;
+    // If still a stub after ensure, try to seed with minimal repo facts
+    try {
+      const pkgPath = join(cwd, "package.json");
+      const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, "utf8")) : null;
+      const topDirs = readdirSync(cwd, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith(".") && d.name !== "node_modules")
+        .map((d) => d.name)
+        .slice(0, 12)
+        .join(", ");
+      const stub = readFileSync(template, "utf8").trim();
+      const header =
+        file === "architecture.md" && pkg
+          ? `\n\n## Seeded from repo (mine)\n- package: \`${pkg.name ?? "unknown"}\`\n- top dirs: ${topDirs || "(none)"}\n- mined: ${new Date().toISOString().slice(0, 10)}\n`
+          : file === "conventions.md"
+            ? `\n\n## Seeded (mine) — run \`/plan\` to refine via grilling\n`
+            : file === "decisions.md"
+              ? `\n\n## Seeded (mine) — promote permanent decisions via ADRs\n`
+              : `\n\n## Seeded (mine)\n`;
+      // Only enrich if we have something to add beyond the stub
+      if (header.trim().length > 0) {
+        const next = `${stub}${header}`;
+        writeFileSync(destination, next, "utf8");
+        if (!created.includes(destination)) enriched.push(destination);
+      }
+    } catch {}
+  }
+  return enriched;
+}
+
+/** Worktree-aware prime: copy from main when in a worktree, otherwise mine. */
+function primeProjectContextCache(cwd: string): { mode: "worktree" | "mine"; files: string[] } {
+  if (isGitWorktree(cwd)) {
+    return { mode: "worktree", files: copyFromMain(cwd) };
+  }
+  return { mode: "mine", files: mineRepo(cwd) };
 }
 
 // Survive /reload: replace presentation timers while keeping active completion
@@ -1705,6 +1855,15 @@ export default function subagentsExtension(pi: ExtensionAPI) {
       startStatusRefresh(pi);
       updateWidget();
     }
+    // Autonomous prime: ensure .agent exists before any development.
+    // Worktree-aware: copies from main in a worktree, otherwise mines repo stubs.
+    // Idempotent, never overwrites non-stub files; silent unless files were created.
+    try {
+      const { files } = primeProjectContextCache(ctx.cwd);
+      if (files.length > 0) {
+        ctx.ui.notify(`Primed .agent cache (${files.length} files) in ${ctx.cwd}.`, "info");
+      }
+    } catch {}
   });
 
   // Clean up on session shutdown
@@ -2547,6 +2706,25 @@ export default function subagentsExtension(pi: ExtensionAPI) {
     };
   });
 
+  // /prime command — worktree-aware cache bootstrap (autonomous pre-/plan)
+  pi.registerCommand("prime", {
+    description: "Prime .agent cache: copies from main in a worktree, otherwise mines the repo (idempotent, never overwrites)",
+    handler: async (_args, ctx) => {
+      try {
+        const { mode, files } = primeProjectContextCache(ctx.cwd);
+        if (files.length === 0) {
+          ctx.ui.notify(`.agent cache already primed (${mode}).`, "info");
+        } else {
+          const names = files.map((f) => f.replace(ctx.cwd + "/", "")).join(", ");
+          ctx.ui.notify(`Primed .agent cache from ${mode}: ${names}`, "info");
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Cannot prime .agent cache: ${detail}`, "error");
+      }
+    },
+  });
+
   // /plan command — start the full planning workflow
   pi.registerCommand("plan", {
     description: "Start a planning session: /plan <what to build>",
@@ -2557,16 +2735,16 @@ export default function subagentsExtension(pi: ExtensionAPI) {
         return;
       }
 
-      // Create the target project's cache from bundled templates on first use.
-      // Never overwrite existing cache files: they are durable project knowledge.
+      // Worktree-aware prime before planning: copy from main in a worktree, otherwise mine.
+      // Idempotent and never overwrites non-stub files.
       try {
-        const created = ensureProjectContextCache(ctx.cwd);
-        if (created.length > 0) {
-          ctx.ui.notify(`Initialized cached project context in ${join(ctx.cwd, ".agent")}.`, "info");
+        const { files } = primeProjectContextCache(ctx.cwd);
+        if (files.length > 0) {
+          ctx.ui.notify(`Primed cached project context in ${join(ctx.cwd, ".agent")}.`, "info");
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`Cannot initialize .agent context: ${detail}`, "error");
+        ctx.ui.notify(`Cannot prime .agent context: ${detail}`, "error");
         return;
       }
 
