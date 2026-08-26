@@ -1,8 +1,8 @@
-# plan-herdr-subagents
+# pi-herdr-subagents-planning
 
-**One `pi` package for the entire `/plan` grill-and-plan workflow.**
+**One `pi` package for the entire `/plan` grill-and-plan workflow on `herdr` subagents.**
 
-`plan-herdr-subagents` bundles the whole pipeline into a single install (V3: cached + fresh contexts):
+`pi-herdr-subagents-planning` bundles the whole pipeline into a single install (V3: cached + fresh contexts):
 
 ```
 Cached context (.agent/)  →  architecture, conventions, decisions, domain (stable, reused)
@@ -57,14 +57,14 @@ flowchart TD
 
 `CONTEXT.md` and ADRs model the product domain; `.agent/` models durable project knowledge. The plan, scout report, source reads, diff, and test evidence are fresh task context and are not promoted unless they become permanent.
 
-Install once, get the slash command, every agent, every skill, todo forwarding, and diagnostics — no five-package choreography. On the first `/plan`, the extension initializes the target project's `.agent/` cache from bundled templates without overwriting existing knowledge.
+Install once, get the slash commands, every agent, every skill, todo forwarding, and diagnostics — no five-package choreography. On the first `/plan` (or `session_start`), the extension worktree-aware primes the target project's `.agent/` cache — copies from `main` in a worktree, otherwise mines via `primer` scout — without overwriting existing knowledge.
 
 ```bash
-pi install npm:plan-herdr-subagents
+pi install npm:pi-herdr-subagents-planning
 # or local dev
-pi install ./plan-herdr-subagents
+pi install ./pi-herdr-subagents-planning
 # try without persisting
-pi -e ./plan-herdr-subagents
+pi -e ./pi-herdr-subagents-planning
 ```
 
 Then inside `herdr`:
@@ -95,7 +95,7 @@ Keeping those in sync across machines was brittle. This package vendors the work
 
 | Extension | Source in this package | Baseline | What it does |
 | --- | --- | --- | --- |
-| `herdr-subagents` | `extensions/herdr-subagents/index.ts` (vendored) | `pi-herdr-subagents@^0.1.7` | `subagent` / `subagent_resume` / `subagent_interrupt` / `subagents_list`, `/plan` / `/iterate` / `/subagent` slash commands, herdr pane lifecycle, model routing (`config.json`), status widget |
+| `herdr-subagents` | `extensions/herdr-subagents/index.ts` (vendored) | `pi-herdr-subagents@^0.1.7` | `subagent` / `subagent_resume` / `subagent_interrupt` / `subagents_list`, `/plan` / `/prime` / `/iterate` / `/subagent` slash commands, herdr pane lifecycle, model routing (`config.json`), status widget, worktree-aware `prime` (copy-from-`main` vs `primer` scout) |
 | `planner-todo-forward` | `extensions/planner-todo-forward.ts` | previously `~/.pi/agent/extensions/planner-todo-forward.ts` (global) | ensures the interactive planner's todos land in the **parent** session (sidecar + live-store import) instead of dying with the ephemeral planner session |
 | `rpiv-todo` | `node_modules/@juicesharp/rpiv-todo/index.ts` | `@juicesharp/rpiv-todo@^2.7.1` | `todo` tool, live overlay, replay, blockedBy graph, persistence |
 | `pi-lens` | `node_modules/pi-lens/dist/index.js` | `pi-lens@^3.8.74` | LSP + Biome/Ruff/ast-grep/knip/jscpd diagnostics for workers (`lens_diagnostics`, `lsp_diagnostics`, `symbol_search`, `module_report`, …) |
@@ -109,6 +109,7 @@ Keeping those in sync across machines was brittle. This package vendors the work
 | `planner` | `openai-codex/gpt-5.6-sol` | one-session griller + planner: design-tree rounds → `CONTEXT.md`/`docs/adr` → pointer `plan.md` + pointer todos |
 | `worker` | `opencode-go/muse-spark-1.2-contributor` | pointer-task executor: resolves pattern from code, grounds APIs via `query-docs`/`symbol_search`, runs acceptance commands, `lsp_diagnostics`/`lens_diagnostics` clean, commits, closes todo |
 | `scout` | `openai-codex/gpt-5.6-luna` | fast read-only reconnaissance for facts the planner needs |
+| `primer` | `openai-codex/gpt-5.6-luna` | `.agent` cache primer: mines architecture/conventions/decisions/domain from repo (spawned by `/prime` mine path, idempotent) |
 | `reviewer` | `openai-codex/gpt-5.6-terra` | ISC-evidence review against `plan.md` + `CONTEXT.md` + ADRs, P0-P3 triage |
 | `visual-tester` | (inherits `models.default`) | Chrome-CDP visual QA (bundled from upstream) |
 
@@ -201,13 +202,14 @@ Requires `herdr` (the only supported terminal) with `HERDR_ENV=1`.
 ```bash
 herdr
 pi
+/prime            # optional: explicitly prime .agent (worktree→copy from main, else primer scout)
 /plan <your request>
 ```
 
-The slash command injects `extensions/herdr-subagents/plan-skill.md` (V3: cached + fresh) into the main session. The main agent then:
+The slash commands are `extensions/herdr-subagents/plan-skill.md` (V3: cached + fresh). The main agent then:
 
-1. ~30s orientation (`ls .agent/`, `find`, `package.json` peek)
-2. initializes missing `.agent/` cache files from bundled templates, then spawns one interactive `planner` (`interactive: true`) — loads cached context, grill rounds until frontier empty → writes `.agent/plans/YYYY-MM-DD-<name>/plan.md` + `CONTEXT.md`/`docs/adr` + pointer todos (forwarded to parent)
+1. `session_start` worktree-aware prime (copy-from-`main` in worktree, else heuristic mine) — no manual step needed; `/prime` is the explicit deep variant (spawns `primer` scout when `.agent` is stub)
+2. ~30s orientation (`ls .agent/`, `find`, `package.json` peek) then spawns one interactive `planner` (`interactive: true`) — loads cached context, grill rounds until frontier empty → writes `.agent/plans/YYYY-MM-DD-<name>/plan.md` + `CONTEXT.md`/`docs/adr` + pointer todos (forwarded to parent)
 3. human gate (you review ISC + todos)
 4. sequential `worker` loop — each worker loads cached context + `plan.md` § + pattern file only (`caller_ping` on ambiguity); scout only if unfamiliar/large
 5. `reviewer` against ISC/acceptance commands (cached + plan + diff)
