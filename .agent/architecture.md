@@ -41,5 +41,5 @@ Models fixed via `config.json` (`models.default` → `models.agents.<role>`). Sp
 ## References
 
 - `extensions/herdr-subagents/index.ts` — launch/observe/lifecycle/widget.
-- `extensions/herdr-subagents/plan-skill.md` — V3 workflow (cached + fresh layers).
+- `extensions/herdr-subagents/plan-skill.md` — workflow (cached + fresh layers).
 - `agents/planner.md`, `agents/worker.md`, `agents/reviewer.md`, `agents/scout.md`.

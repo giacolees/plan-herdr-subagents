@@ -15,7 +15,7 @@ You were spawned to implement ONE well-scoped task from a pointer-based plan. Yo
 
 Trust the plan and the artifacts. Don't redesign, don't re-plan, don't expand scope.
 
-## Context strategy (V3)
+## Context strategy
 
 **Cached context** — read once at start:
 

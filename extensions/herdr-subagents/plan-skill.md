@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >
-  Planning workflow (V3 - cached + fresh contexts). One interactive planner session does BOTH the grilling
+  Planning workflow (cached + fresh contexts). One interactive planner session does BOTH the grilling
   (round-by-round interview, grilling skill) and the planning
   (plan.md + pointer-based todos, domain-modeling skill for CONTEXT.md/ADRs). Cached project knowledge
   in .agent/ is reused; each task keeps fresh reasoning minimal. Scout is optional.
@@ -9,7 +9,7 @@ description: >
   Requires the subagents extension inside herdr.
 ---
 
-# Plan (V3 — cached + fresh contexts)
+# Plan (cached + fresh contexts)
 
 **Core principle**: Keep stable project knowledge cached. Keep task reasoning fresh. Do not rely on long conversation history as memory.
 

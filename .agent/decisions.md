@@ -40,7 +40,7 @@ Permanent architectural decisions. See `docs/adr/` for full ADRs (when the 3-cri
 
 **Why**: Avoid commit conflicts and reasoning sprawl; scout is optional (unfamiliar/large changes only).
 
-## D7 — Cached vs fresh context split (V3, 2026-08-25)
+## D7 — Cached vs fresh context split (2026-08-25)
 
 **Decision**: `.agent/` holds stable knowledge (architecture, conventions, decisions, domain); each task starts fresh (request + relevant files + plan + diff). History is not memory.
 

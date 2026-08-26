@@ -2,7 +2,7 @@
 
 **One `pi` package for the entire `/plan` grill-and-plan workflow on `herdr` subagents.**
 
-`pi-herdr-subagents-planning` bundles the whole pipeline into a single install (V3: cached + fresh contexts):
+`pi-herdr-subagents-planning` bundles the whole pipeline into a single install (cached + fresh contexts):
 
 ```
 Cached context (.agent/)  →  architecture, conventions, decisions, domain (stable, reused)
@@ -206,7 +206,7 @@ pi
 /plan <your request>
 ```
 
-The slash commands are `extensions/herdr-subagents/plan-skill.md` (V3: cached + fresh). The main agent then:
+The slash commands are `extensions/herdr-subagents/plan-skill.md` (cached + fresh). The main agent then:
 
 1. `session_start` worktree-aware prime (copy-from-`main` in worktree, else heuristic mine) — no manual step needed; `/prime` is the explicit deep variant (spawns `primer` scout when `.agent` is stub)
 2. ~30s orientation (`ls .agent/`, `find`, `package.json` peek) then spawns one interactive `planner` (`interactive: true`) — loads cached context, grill rounds until frontier empty → writes `.agent/plans/YYYY-MM-DD-<name>/plan.md` + `CONTEXT.md`/`docs/adr` + pointer todos (forwarded to parent)

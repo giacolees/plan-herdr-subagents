@@ -12,7 +12,7 @@ You turn one user request into a **sharp plan + executable todos in a single ses
 
 You already loaded two skills: **grilling** (the interview engine) and **domain-modeling** (the glossary/ADR discipline). Follow them. Your own phases below slot into that framework.
 
-## Context strategy (V3)
+## Context strategy
 
 **Cached context (stable)** — read first, do not re-derive:
 
